@@ -10,6 +10,11 @@ def main():
     )
     parser.add_argument("--catalog", required=True)
     parser.add_argument("--schema", required=True)
+    parser.add_argument(
+        "--source-api-url",
+        default="https://restcountries.com/v3.1/all",
+        help="REST Countries source API endpoint",
+    )
     args = parser.parse_args()
 
     # Set the default catalog and schema

@@ -1,5 +1,6 @@
-# This is a Databricks asset bundle definition for atlas_stream.
-# See https://docs.databricks.com/dev-tools/bundles/index.html for documentation.
+# Databricks Asset Bundle — atlas_stream country pipeline
+# Docs: https://docs.databricks.com/dev-tools/bundles/index.html
+
 bundle:
   name: atlas_stream
   uuid: 8d88bd58-94ac-4083-975d-c9ce7e6131ad
@@ -7,40 +8,69 @@ bundle:
 include:
   - resources/*.yml
 
+# ---------------------------------------------------------------------------
+# Artifact: Python wheel used by the python_wheel_task in the job
+# ---------------------------------------------------------------------------
 artifacts:
   python_artifact:
     type: whl
     build: uv build --wheel
 
-# Variable declarations. These variables are assigned in the dev/prod targets below.
+# ---------------------------------------------------------------------------
+# Variables
+# Defaults apply unless overridden per target or at deploy time with --var.
+# ---------------------------------------------------------------------------
 variables:
   catalog:
-    description: The catalog to use
-  schema:
-    description: The schema to use
+    description: Unity Catalog catalog name
+    default: workspace
 
+  schema:
+    description: Unity Catalog schema name
+    # No global default — each target sets its own value
+
+  source_api_url:
+    description: REST Countries source API endpoint
+    default: https://restcountries.com/v3.1/all
+
+  schedule_pause_status:
+    description: Job trigger pause status — PAUSED or UNPAUSED
+    default: UNPAUSED
+
+# ---------------------------------------------------------------------------
+# Targets
+# Workspace host is resolved from the local ~/.databrickscfg profile.
+# In CI, set DATABRICKS_HOST + DATABRICKS_TOKEN env vars instead of a profile.
+# ---------------------------------------------------------------------------
 targets:
+  # -- Development (default) ------------------------------------------------
+  # mode: development automatically:
+  #   - prefixes all resource names with "[dev <username>]"
+  #   - pauses all job schedules and triggers
+  # Profile: configure "atlas_stream_dev" in ~/.databrickscfg
+  #   databricks configure --profile atlas_stream_dev
   dev:
-    # The default target uses 'mode: development' to create a development copy.
-    # - Deployed resources get prefixed with '[dev my_user_name]'
-    # - Any job schedules and triggers are paused by default.
-    # See also https://docs.databricks.com/dev-tools/bundles/deployment-modes.html.
     mode: development
     default: true
     workspace:
-      host: https://dbc-acdc353e-0e47.cloud.databricks.com
+      profile: atlas_stream_dev
     variables:
-      catalog: workspace
       schema: ${workspace.current_user.short_name}
+      schedule_pause_status: PAUSED
+
+  # -- Production ------------------------------------------------------------
+  # Deploy path is pinned so only a single prod copy ever exists.
+  # Profile: configure "atlas_stream" in ~/.databrickscfg, or let CI
+  # env vars (DATABRICKS_HOST / DATABRICKS_TOKEN) take precedence.
+  #   databricks configure --profile atlas_stream
   prod:
     mode: production
     workspace:
-      host: https://dbc-acdc353e-0e47.cloud.databricks.com
-      # We explicitly deploy to /Workspace/Users/dbbruijn@gmail.com to make sure we only have a single copy.
+      profile: atlas_stream
       root_path: /Workspace/Users/dbbruijn@gmail.com/.bundle/${bundle.name}/${bundle.target}
     variables:
-      catalog: workspace
       schema: prod
+      schedule_pause_status: UNPAUSED
     permissions:
       - user_name: dbbruijn@gmail.com
         level: CAN_MANAGE

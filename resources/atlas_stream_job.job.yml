@@ -1,4 +1,5 @@
-# A sample job for atlas_stream.
+# Orchestration job for the atlas_stream pipeline.
+# Runs: notebook → python wheel → DLT pipeline refresh.
 
 resources:
   jobs:
@@ -6,10 +7,12 @@ resources:
       name: atlas_stream_job
 
       trigger:
-        # Run this job every day, exactly one day from the last run; see https://docs.databricks.com/api/workspace/jobs/create#trigger
+        # Run once a day; pause status is controlled by the schedule_pause_status variable.
+        # In dev mode the bundle also pauses this automatically.
         periodic:
           interval: 1
           unit: DAYS
+        pause_status: ${var.schedule_pause_status}
 
       #email_notifications:
       #  on_failure:
@@ -20,11 +23,14 @@ resources:
           default: ${var.catalog}
         - name: schema
           default: ${var.schema}
+        - name: source_api_url
+          default: ${var.source_api_url}
 
       tasks:
         - task_key: notebook_task
           notebook_task:
             notebook_path: ../src/sample_notebook.ipynb
+
         - task_key: python_wheel_task
           depends_on:
             - task_key: notebook_task
@@ -36,7 +42,10 @@ resources:
               - "${var.catalog}"
               - "--schema"
               - "${var.schema}"
+              - "--source-api-url"
+              - "${var.source_api_url}"
           environment_key: default
+
         - task_key: refresh_pipeline
           depends_on:
             - task_key: notebook_task
@@ -48,7 +57,5 @@ resources:
           spec:
             environment_version: "4"
             dependencies:
-              # By default we just include the .whl file generated for the atlas_stream package.
-              # See https://docs.databricks.com/dev-tools/bundles/library-dependencies.html
-              # for more information on how to add other libraries.
+              # The .whl built by "uv build --wheel" — see artifacts in databricks.yml
               - ../dist/*.whl
