@@ -1,6 +1,6 @@
 [project]
 name = "atlas_stream"
-version = "0.0.1"
+version = "0.1.0"
 authors = [{ name = "dbbruijn@gmail.com" }]
 requires-python = ">=3.10,<3.13"
 dependencies = [
@@ -22,9 +22,6 @@ dev = [
 ]
 
 [project.scripts]
-# Legacy entry point (kept for backward compatibility)
-main = "atlas_stream.main:main"
-
 # ETL pipeline entry points — used by python_wheel_task in the job
 ingest_countries          = "atlas_stream.etl.ingest:main"
 bronze_countries_to_silver = "atlas_stream.etl.bronze_to_silver:main"
@@ -39,6 +36,5 @@ build-backend = "hatchling.build"
 line-length = 120
 
 [tool.ruff.lint]
-# F821: DLT transformation files use runtime-injected globals (spark, dbutils, dlt)
-# Notebooks also use these Databricks runtime globals
-per-file-ignores = { "src/atlas_stream_etl/**" = ["F821"], "src/**/*.ipynb" = ["F821"] }
+# F821: notebooks use Databricks runtime-injected globals (spark, dbutils)
+per-file-ignores = { "src/**/*.ipynb" = ["F821"] }

@@ -1,43 +1,55 @@
-"""This file configures pytest, initializes Databricks Connect, and provides fixtures for Spark and loading test data."""
+"""pytest configuration: Databricks Connect fixtures for the atlas_stream ETL tests.
 
+The ``spark`` fixture connects via Databricks Connect using the ``atlas_stream_dev``
+profile.  Tests that declare ``spark`` as a parameter are automatically skipped when
+authentication is unavailable (e.g. in CI without credentials).
+
+All imports that touch the Databricks SDK are kept *inside* fixture bodies so that
+pytest can collect and run pure-Python tests even without credentials.
+"""
+
+import csv
+import json
 import os
-import sys
 import pathlib
-from contextlib import contextmanager
 
+import pytest
 
-try:
-    from databricks.connect import DatabricksSession
-    from databricks.sdk import WorkspaceClient
-    from pyspark.sql import SparkSession
-    import pytest
-    import json
-    import csv
-    import os
-except ImportError:
-    raise ImportError(
-        "Test dependencies not found.\n\nRun tests using 'uv run pytest'. See http://docs.astral.sh/uv to learn more about uv."
-    )
+# Resolve profile ambiguity: ensure the SDK uses the dev profile when running
+# tests locally.  Must be set before any ETL module is imported because
+# databricks.sdk.runtime initialises RemoteDbUtils (and hence Config) at
+# module-load time.
+os.environ.setdefault("DATABRICKS_CONFIG_PROFILE", "atlas_stream_dev")
 
 
 @pytest.fixture()
-def spark() -> SparkSession:
-    """Provide a SparkSession fixture for tests.
+def spark():
+    """SparkSession via Databricks Connect (atlas_stream_dev profile).
+
+    Skipped automatically when Databricks Connect is not installed or when
+    authentication fails — allowing pure-Python tests to always run.
 
     Minimal example:
         def test_uses_spark(spark):
             df = spark.createDataFrame([(1,)], ["x"])
             assert df.count() == 1
     """
-    return DatabricksSession.builder.getOrCreate()
+    try:
+        from databricks.connect import DatabricksSession
+    except ImportError:
+        pytest.skip("databricks-connect not installed")
+
+    try:
+        return DatabricksSession.builder.profile("atlas_stream_dev").getOrCreate()
+    except Exception as exc:
+        pytest.skip(f"Databricks Connect unavailable: {exc}")
 
 
 @pytest.fixture()
-def load_fixture(spark: SparkSession):
-    """Provide a callable to load JSON or CSV from fixtures/ directory.
+def load_fixture(spark):
+    """Return a callable that loads JSON or CSV from the fixtures/ directory.
 
     Example usage:
-
         def test_using_fixture(load_fixture):
             data = load_fixture("my_data.json")
             assert data.count() >= 1
@@ -56,41 +68,3 @@ def load_fixture(spark: SparkSession):
         raise ValueError(f"Unsupported fixture type for: {filename}")
 
     return _loader
-
-
-def _enable_fallback_compute():
-    """Enable serverless compute if no compute is specified."""
-    conf = WorkspaceClient().config
-    if conf.serverless_compute_id or conf.cluster_id or os.environ.get("SPARK_REMOTE"):
-        return
-
-    url = "https://docs.databricks.com/dev-tools/databricks-connect/cluster-config"
-    print("☁️ no compute specified, falling back to serverless compute", file=sys.stderr)
-    print(f"  see {url} for manual configuration", file=sys.stdout)
-
-    os.environ["DATABRICKS_SERVERLESS_COMPUTE_ID"] = "auto"
-
-
-@contextmanager
-def _allow_stderr_output(config: pytest.Config):
-    """Temporarily disable pytest output capture."""
-    capman = config.pluginmanager.get_plugin("capturemanager")
-    if capman:
-        with capman.global_and_fixture_disabled():
-            yield
-    else:
-        yield
-
-
-def pytest_configure(config: pytest.Config):
-    """Configure pytest session."""
-    with _allow_stderr_output(config):
-        _enable_fallback_compute()
-
-        # Initialize Spark session eagerly, so it is available even when
-        # SparkSession.builder.getOrCreate() is used. For DB Connect 15+,
-        # we validate version compatibility with the remote cluster.
-        if hasattr(DatabricksSession.builder, "validateSession"):
-            DatabricksSession.builder.validateSession().getOrCreate()
-        else:
-            DatabricksSession.builder.getOrCreate()
