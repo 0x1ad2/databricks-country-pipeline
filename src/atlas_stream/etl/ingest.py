@@ -43,9 +43,9 @@ def main() -> None:
     parser.add_argument(
         "--source-api-url",
         # ?fields= is required by the v3.1 API — omitting it returns HTTP 400.
-        # Extend this list when new silver/gold columns are needed.
-        default="https://restcountries.com/v3.1/all?fields=name,cca2,cca3,region,subregion,population,area,landlocked,unMember,capital,continents,flags",
-        help="REST Countries API endpoint (must include ?fields=)",
+        # The API allows a maximum of 10 fields per request.
+        default="https://restcountries.com/v3.1/all?fields=name,cca2,cca3,region,subregion,population,area,landlocked,unMember",
+        help="REST Countries API endpoint (must include ?fields=, max 10 fields)",
     )
     args = parser.parse_args()
     ingest_countries(args.catalog, args.source_api_url)

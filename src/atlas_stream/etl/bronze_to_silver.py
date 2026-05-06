@@ -10,15 +10,21 @@ Target: <catalog>.silver.countries
 import argparse
 
 from databricks.sdk.runtime import spark
-from pyspark.sql.functions import col, current_timestamp
+from pyspark.sql.functions import col, current_timestamp, from_json, lit, schema_of_json
 
 
 def bronze_to_silver(catalog: str) -> None:
     bronze_df = spark.read.table(f"`{catalog}`.bronze.countries_raw")
 
-    # Infer schema from the stored JSON strings using Spark's JSON reader
-    json_rdd = bronze_df.select("raw_json").rdd.map(lambda row: row.raw_json)
-    parsed = spark.read.json(json_rdd)
+    # Infer JSON schema from a single sample row — no RDD, fully serverless-compatible.
+    sample_json = bronze_df.select("raw_json").limit(1).collect()[0][0]
+    schema_str = bronze_df.select(schema_of_json(lit(sample_json))).collect()[0][0]
+
+    parsed = (
+        bronze_df
+        .select(from_json(col("raw_json"), schema_str).alias("data"))
+        .select("data.*")
+    )
 
     silver_df = (
         parsed.select(
@@ -52,3 +58,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
