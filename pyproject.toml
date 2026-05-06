@@ -4,11 +4,12 @@ version = "0.0.1"
 authors = [{ name = "dbbruijn@gmail.com" }]
 requires-python = ">=3.10,<3.13"
 dependencies = [
-    # Any dependencies for jobs and pipelines in this project can be added here
+    # Runtime dependencies — included in the deployed wheel and job environments.
     # See also https://docs.databricks.com/dev-tools/bundles/library-dependencies
     #
-    # LIMITATION: for pipelines, dependencies are cached during development;
-    # add dependencies to the 'environment' section of your pipeline.yml file instead
+    # LIMITATION: for DLT pipelines, dependencies are cached during development;
+    # add dependencies to the 'environment' section of your pipeline.yml file instead.
+    "requests>=2.31",
 ]
 
 [dependency-groups]
@@ -21,7 +22,14 @@ dev = [
 ]
 
 [project.scripts]
+# Legacy entry point (kept for backward compatibility)
 main = "atlas_stream.main:main"
+
+# ETL pipeline entry points — used by python_wheel_task in the job
+ingest_countries          = "atlas_stream.etl.ingest:main"
+bronze_countries_to_silver = "atlas_stream.etl.bronze_to_silver:main"
+silver_countries_to_gold  = "atlas_stream.etl.silver_to_gold:main"
+verify_country_tables     = "atlas_stream.etl.verify:main"
 
 [build-system]
 requires = ["hatchling"]

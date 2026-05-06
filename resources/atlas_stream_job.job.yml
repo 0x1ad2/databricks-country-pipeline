@@ -1,5 +1,6 @@
-# Orchestration job for the atlas_stream pipeline.
-# Runs: notebook → python wheel → DLT pipeline refresh.
+# Orchestration job for the atlas_stream ETL pipeline.
+# Medallion architecture: bronze → silver → gold → verify
+# All tasks run serverless (no cluster key required).
 
 resources:
   jobs:
@@ -7,8 +8,8 @@ resources:
       name: atlas_stream_job
 
       trigger:
-        # Run once a day; pause status is controlled by the schedule_pause_status variable.
-        # In dev mode the bundle also pauses this automatically.
+        # Run once a day; pause_status is overridden per target in databricks.yml.
+        # In dev mode the bundle also pauses schedules automatically.
         periodic:
           interval: 1
           unit: DAYS
@@ -18,44 +19,76 @@ resources:
       #  on_failure:
       #    - your_email@example.com
 
+      # Job-level parameters — can be overridden at runtime via the UI or CLI.
       parameters:
         - name: catalog
           default: ${var.catalog}
-        - name: schema
-          default: ${var.schema}
         - name: source_api_url
           default: ${var.source_api_url}
 
+      # ------------------------------------------------------------------
+      # Task 1: Fetch REST Countries API → bronze.countries_raw
+      # ------------------------------------------------------------------
       tasks:
-        - task_key: notebook_task
-          notebook_task:
-            notebook_path: ../src/sample_notebook.ipynb
-
-        - task_key: python_wheel_task
-          depends_on:
-            - task_key: notebook_task
+        - task_key: ingest_countries_to_bronze
           python_wheel_task:
             package_name: atlas_stream
-            entry_point: main
+            entry_point: ingest_countries
             parameters:
               - "--catalog"
-              - "${var.catalog}"
-              - "--schema"
-              - "${var.schema}"
+              - "{{job.parameters.catalog}}"
               - "--source-api-url"
-              - "${var.source_api_url}"
+              - "{{job.parameters.source_api_url}}"
           environment_key: default
 
-        - task_key: refresh_pipeline
+        # ------------------------------------------------------------------
+        # Task 2: Parse bronze JSON → silver.countries
+        # ------------------------------------------------------------------
+        - task_key: bronze_countries_to_silver
           depends_on:
-            - task_key: notebook_task
-          pipeline_task:
-            pipeline_id: ${resources.pipelines.atlas_stream_etl.id}
+            - task_key: ingest_countries_to_bronze
+          python_wheel_task:
+            package_name: atlas_stream
+            entry_point: bronze_countries_to_silver
+            parameters:
+              - "--catalog"
+              - "{{job.parameters.catalog}}"
+          environment_key: default
 
+        # ------------------------------------------------------------------
+        # Task 3: Aggregate silver → gold.countries_by_region
+        # ------------------------------------------------------------------
+        - task_key: silver_countries_to_gold
+          depends_on:
+            - task_key: bronze_countries_to_silver
+          python_wheel_task:
+            package_name: atlas_stream
+            entry_point: silver_countries_to_gold
+            parameters:
+              - "--catalog"
+              - "{{job.parameters.catalog}}"
+          environment_key: default
+
+        # ------------------------------------------------------------------
+        # Task 4: Assert all three tables are non-empty
+        # ------------------------------------------------------------------
+        - task_key: verify_country_tables
+          depends_on:
+            - task_key: silver_countries_to_gold
+          python_wheel_task:
+            package_name: atlas_stream
+            entry_point: verify_country_tables
+            parameters:
+              - "--catalog"
+              - "{{job.parameters.catalog}}"
+          environment_key: default
+
+      # Serverless environment: environment_version "2" enables serverless
+      # compute — compatible with Databricks Free Edition.
       environments:
         - environment_key: default
           spec:
-            environment_version: "4"
+            environment_version: "2"
             dependencies:
-              # The .whl built by "uv build --wheel" — see artifacts in databricks.yml
+              # The wheel built by "uv build --wheel" (see artifacts in databricks.yml)
               - ../dist/*.whl

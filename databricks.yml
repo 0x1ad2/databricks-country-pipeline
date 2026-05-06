@@ -30,8 +30,8 @@ variables:
     # No global default — each target sets its own value
 
   source_api_url:
-    description: REST Countries source API endpoint
-    default: https://restcountries.com/v3.1/all
+    description: REST Countries API endpoint — must include ?fields= (v3.1 returns 400 without it)
+    default: https://restcountries.com/v3.1/all?fields=name,cca2,cca3,region,subregion,population,area,landlocked,unMember,capital,continents,flags
 
   schedule_pause_status:
     description: Job trigger pause status — PAUSED or UNPAUSED
