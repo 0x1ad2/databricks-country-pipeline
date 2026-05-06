@@ -1,0 +1,59 @@
+{
+  "jupyter.interactiveWindow.cellMarker.codeRegex": "^# COMMAND ----------|^# Databricks notebook source|^(#\\s*%%|#\\s*\\<codecell\\>|#\\s*In\\[\\d*?\\]|#\\s*In\\[ \\])",
+  "jupyter.interactiveWindow.cellMarker.default": "# COMMAND ----------",
+  "python.testing.pytestArgs": ["."],
+  "files.exclude": {
+    "**/*.egg-info": true,
+    "**/__pycache__": true,
+    ".pytest_cache": true,
+    "dist": true
+  },
+  "files.associations": {
+    "**/.gitkeep": "markdown"
+  },
+
+  // Pylance settings (VS Code)
+  // Set typeCheckingMode to "basic" to enable type checking!
+  "python.analysis.typeCheckingMode": "off",
+  "python.analysis.extraPaths": ["src", "lib", "resources"],
+  "python.analysis.diagnosticMode": "workspace",
+  "python.analysis.stubPath": ".vscode",
+
+  // Pyright settings (Cursor)
+  // Set typeCheckingMode to "basic" to enable type checking!
+  "cursorpyright.analysis.typeCheckingMode": "off",
+  "cursorpyright.analysis.extraPaths": ["src", "lib", "resources"],
+  "cursorpyright.analysis.diagnosticMode": "workspace",
+  "cursorpyright.analysis.stubPath": ".vscode",
+
+  // General Python settings
+  "python.defaultInterpreterPath": "./.venv/bin/python",
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true,
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true
+  },
+
+  // Theme settings
+  "workbench.colorCustomizations": {
+    "activityBar.activeBackground": "#e56a62",
+    "activityBar.background": "#e56a62",
+    "activityBar.foreground": "#15202b",
+    "activityBar.inactiveForeground": "#15202b99",
+    "activityBarBadge.background": "#126d18",
+    "activityBarBadge.foreground": "#e7e7e7",
+    "commandCenter.border": "#e7e7e799",
+    "sash.hoverBorder": "#e56a62",
+    "statusBar.background": "#de4036",
+    "statusBar.foreground": "#e7e7e7",
+    "statusBarItem.hoverBackground": "#e56a62",
+    "statusBarItem.remoteBackground": "#de4036",
+    "statusBarItem.remoteForeground": "#e7e7e7",
+    "titleBar.activeBackground": "#de4036",
+    "titleBar.activeForeground": "#e7e7e7",
+    "titleBar.inactiveBackground": "#de403699",
+    "titleBar.inactiveForeground": "#e7e7e799"
+  },
+  "peacock.color": "#de4036"
+}
