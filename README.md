@@ -8,16 +8,16 @@ A [Databricks Asset Bundle](https://docs.databricks.com/dev-tools/bundles/index.
 REST Countries API
         │
         ▼
-┌───────────────────┐     ┌───────────────────┐     ┌─────────────────────────┐
-│  bronze           │────▶│  silver           │────▶│  gold                   │
-│  countries_raw    │     │  countries        │     │  countries_by_region    │
-│  (raw JSON rows)  │     │  (typed columns)  │     │  (aggregated analytics) │
-└───────────────────┘     └───────────────────┘     └─────────────────────────┘
-        │                         │                           │
-        └─────────────────────────┴───────────────────────────┘
-                                  │
-                              verify task
-                     (asserts all 3 tables non-empty)
+┌───────────────────┐     ┌───────────────────┐     ┌──────────────────────────────┐
+│  bronze           │────▶│  silver           │────▶│  gold (6 tables)             │
+│  countries_raw    │     │  countries        │     │  countries                   │
+│  (raw JSON rows)  │     │  (typed columns)  │     │  countries_by_region         │
+└───────────────────┘     └───────────────────┘     │  countries_by_continent      │
+        │                         │                  │  population_tiers            │
+        └─────────────────────────┴──────────────────│  landlocked_vs_coastal       │
+                                  │                  │  un_membership_summary       │
+                              verify task            └──────────────────────────────┘
+                     (asserts all 8 tables non-empty)
 ```
 
 All four tasks run on **serverless compute** (no cluster management needed).
@@ -34,7 +34,7 @@ src/
     etl/
       ingest.py                       # Task 1: REST API → bronze.countries_raw
       bronze_to_silver.py             # Task 2: JSON parse → silver.countries
-      silver_to_gold.py               # Task 3: Aggregate → gold.countries_by_region
+      silver_to_gold.py               # Task 3: Aggregate silver → 6 gold tables
       verify.py                       # Task 4: Assert all tables non-empty
 tests/
   conftest.py                         # pytest fixtures (DatabricksSession, fixture loader)
@@ -108,8 +108,8 @@ databricks bundle validate
 |---|----------|-------------|-----------------|
 | 1 | `ingest_countries_to_bronze` | `ingest_countries` | REST API → `bronze.countries_raw` |
 | 2 | `bronze_countries_to_silver` | `bronze_countries_to_silver` | `bronze.countries_raw` → `silver.countries` |
-| 3 | `silver_countries_to_gold` | `silver_countries_to_gold` | `silver.countries` → `gold.countries_by_region` |
-| 4 | `verify_country_tables` | `verify_country_tables` | Asserts all three tables non-empty |
+| 3 | `silver_countries_to_gold` | `silver_countries_to_gold` | `silver.countries` → 6 `gold.*` tables |
+| 4 | `verify_country_tables` | `verify_country_tables` | Asserts all 8 tables non-empty |
 
 Tasks run in sequence with `depends_on` dependencies. A failure in any task halts the chain.
 
@@ -150,15 +150,35 @@ databricks bundle run atlas_stream_job --target prod
 After the job completes, query the gold layer in a Databricks notebook or SQL editor:
 
 ```sql
+-- Enriched country table with density and size category
+SELECT name_common, cca2, region, population, population_density, size_category
+FROM workspace.gold.countries
+ORDER BY population_density DESC;
+
 -- Regional summary
 SELECT region, subregion, country_count, total_population, total_area_km2, un_member_count
 FROM workspace.gold.countries_by_region
 ORDER BY total_population DESC;
 
--- All countries
-SELECT name_common, cca2, region, subregion, population, area, un_member
-FROM workspace.silver.countries
-ORDER BY population DESC;
+-- Continent rollup
+SELECT continent, country_count, total_population
+FROM workspace.gold.countries_by_continent
+ORDER BY total_population DESC;
+
+-- Population size distribution
+SELECT population_tier, country_count, total_population
+FROM workspace.gold.population_tiers
+ORDER BY total_population DESC;
+
+-- Landlocked vs coastal by region
+SELECT region, landlocked, country_count, total_population
+FROM workspace.gold.landlocked_vs_coastal
+ORDER BY region, landlocked;
+
+-- UN membership by region
+SELECT region, un_member, country_count, total_population
+FROM workspace.gold.un_membership_summary
+ORDER BY region, un_member;
 ```
 
 ## Workspace

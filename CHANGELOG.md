@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-06
+
+### Added
+
+- `gold.countries` — enriched country-level table with `population_density` (people / km²) and `size_category` bucket (`Very Large` / `Large` / `Medium` / `Small`)
+- `gold.countries_by_continent` — continent-level rollup (collapses subregions into a single row per continent)
+- `gold.population_tiers` — countries bucketed by population size (`Large ≥100M` / `Medium 10M–100M` / `Small 1M–10M` / `Micro <1M`)
+- `gold.landlocked_vs_coastal` — landlocked vs coastal country counts and population totals per region
+- `gold.un_membership_summary` — UN member vs non-member counts and population totals per region
+
+### Changed
+
+- `silver_to_gold.py` — rewritten to produce six gold tables (was one); `_write()` helper introduced to DRY table writes
+- `verify.py` — updated `_TABLES` list to assert all eight medallion tables non-empty (was three)
+- `tests/test_countries_etl.py` — updated verify and schema tests to cover the expanded table set (12 tests total)
+- Architecture diagram and SQL examples in `README.md` updated to reflect six gold tables
+
+### Fixed
+
+- Removed `cache()` / `unpersist()` calls that are not supported on Databricks serverless compute
+- `_write()` in `silver_to_gold.py` and post-write logging in `bronze_to_silver.py` now read row counts from the already-written Delta table instead of re-executing the full transformation plan (double-compute antipattern)
+
 ## [0.1.0] — 2026-05-06
 
 ### Added

@@ -46,7 +46,9 @@ def bronze_to_silver(catalog: str) -> None:
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{catalog}`.silver")
     silver_df.write.format("delta").mode("overwrite").saveAsTable(f"`{catalog}`.silver.countries")
 
-    print(f"Wrote {silver_df.count()} rows → `{catalog}`.silver.countries")
+    # Read count from the written table — avoids re-executing the transformation plan.
+    row_count = spark.read.table(f"`{catalog}`.silver.countries").count()
+    print(f"Wrote {row_count} rows \u2192 `{catalog}`.silver.countries")
 
 
 def main() -> None:
