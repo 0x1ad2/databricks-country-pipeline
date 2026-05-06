@@ -1,17 +1,31 @@
-name: 🚀 Deploy
+# Emergency / manual re-deploy workflow.
+# Automatic deploys on push to master are handled by ci.yml (deploy job).
+# Use this only when you need to force a prod deploy without a code push
+# (e.g. config rollback, secret rotation).
+
+name: Manual Deploy
 
 on:
-    push:
-        branches:
-            - master
+    workflow_dispatch:
+        inputs:
+            target:
+                description: Bundle target to deploy
+                required: true
+                default: prod
+                type: choice
+                options:
+                    - prod
+                    - dev
+
+env:
+    FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+    DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
 
 jobs:
     deploy:
+        name: Manual deploy → ${{ inputs.target }}
         runs-on: ubuntu-latest
-
-        env:
-            DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-            DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
 
         steps:
             - uses: actions/checkout@v4
@@ -33,10 +47,7 @@ jobs:
               run: uv build --wheel
 
             - name: Validate bundle
-              run: databricks bundle validate --target prod
+              run: databricks bundle validate --target ${{ inputs.target }}
 
             - name: Deploy bundle
-              run: databricks bundle deploy --target prod
-            # Uncomment to trigger the job after deployment:
-            # - name: Run job
-            #   run: databricks bundle run atlas_stream_job --target prod
+              run: databricks bundle deploy --target ${{ inputs.target }}
