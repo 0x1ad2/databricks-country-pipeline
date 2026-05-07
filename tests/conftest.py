@@ -22,6 +22,15 @@ import pytest
 os.environ.setdefault("DATABRICKS_CONFIG_PROFILE", "atlas_stream_dev")
 
 
+def pytest_configure(config):
+    """Register custom markers so pytest doesn't warn about unknown marks."""
+    config.addinivalue_line(
+        "markers",
+        "spark: marks tests that require a live Databricks Connect session "
+        "(deselect with -m 'not spark')",
+    )
+
+
 @pytest.fixture()
 def spark():
     """SparkSession via Databricks Connect (atlas_stream_dev profile).

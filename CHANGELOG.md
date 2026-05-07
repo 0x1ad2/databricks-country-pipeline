@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-06
+
+### Added
+
+- `src/atlas_stream/etl/schema.py` — explicit `COUNTRY_ROW_SCHEMA` (`StructType`) replacing brittle single-row `schema_of_json` inference; versioned via `SCHEMA_VERSION = 1`
+- `fixtures/sample_countries.json` — 3-country static fixture (NL, DE, TD) used by unit tests
+- `.github/workflows/ci.yml` — GitHub Actions CI: lint with ruff, pure-Python tests without credentials, wheel build, `bundle validate`
+- `Makefile` — developer task runner (`lint`, `test`, `test-all`, `build`, `validate`, `deploy-dev`, `deploy-prod`, `run-dev`, `run-prod`)
+- HTTP retry adapter on ingest session: 3 retries with exponential back-off for status codes 429, 500, 502, 503, 504
+- `batch_id` UUID stamped on every bronze row for downstream deduplication
+- `source_ingested_at` lineage column carried from bronze through silver into all gold tables
+- Response validation in `ingest.py`: rejects non-list, empty, or missing-field API responses before writing to bronze
+- 7-check data quality verification in `verify.py`: table existence + row count, silver row count within expected range, cca2 uniqueness, null region rate < 5%, no null population, no negative population
+- `COMMENT ON TABLE` and `OPTIMIZE` after every Delta write (bronze, silver, all 6 gold tables)
+- Job-level `tags`, `email_notifications` (on_failure), and `health` (max duration) in `atlas_stream_job.job.yml`
+- Per-task `timeout_seconds` and `max_retries` / `min_retry_interval_millis` on all four tasks
+- `sync.exclude` in `databricks.yml` to omit `__pycache__`, `.venv`, `dist`, `*.pyc`, etc.
+- `notification_email` bundle variable (default `dbbruijn@gmail.com`) threaded into job failure alerts
+- `pytest-cov`, `pytest-mock`, `responses` added as dev dependencies
+- `[tool.pytest.ini_options]` and `[tool.coverage.run]` sections in `pyproject.toml`
+- `spark` pytest marker registered in `conftest.py` and `pyproject.toml`
+
+### Changed
+
+- `ingest.py` — bronze writes changed from `mode("overwrite")` to `mode("append").option("mergeSchema","true")` (immutable raw layer; bronze now accumulates all historical batches)
+- `ingest.py` — HTTP timeout changed from a single integer to a `(5, 30)` tuple (separate connect / read timeouts)
+- `ingest.py` — replaced `print()` with `logging.getLogger(__name__)` structured logging throughout
+- `bronze_to_silver.py` — JSON parsing now uses `COUNTRY_ROW_SCHEMA` via `from_json()` instead of single-row `schema_of_json`
+- `bronze_to_silver.py` — processes only the latest bronze batch (`MAX(ingested_at)` filter) instead of the full table
+- `bronze_to_silver.py` — logs cca2 filter drop fraction; aborts if > 2% of rows are dropped
+- `silver_to_gold.py` — `size_category` now maps `area IS NULL → "Unknown"` before the numeric thresholds (was silently classified as "Small")
+- `silver_to_gold.py` — all gold writes now use `mode("overwrite").option("overwriteSchema","true")`
+- `tests/test_countries_etl.py` — expanded from 12 to 19 tests; 15 run without credentials; 4 Spark tests require Databricks Connect
+- `pyproject.toml` — added `requests<3` upper bound; removed `databricks-dlt` dev dependency
+
+### Fixed
+
+- `verify.py` — population check changed from `population <= 0` to `population < 0` so the 5 uninhabited territories (Antarctica, Bouvet Island, etc.) with `population = 0` are no longer incorrectly flagged as data quality failures
+
 ## [0.2.0] — 2026-05-06
 
 ### Added

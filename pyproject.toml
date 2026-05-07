@@ -1,22 +1,21 @@
 [project]
 name = "atlas_stream"
-version = "0.2.0"
+version = "0.3.0"
 authors = [{ name = "dbbruijn@gmail.com" }]
 requires-python = ">=3.10,<3.13"
 dependencies = [
     # Runtime dependencies — included in the deployed wheel and job environments.
     # See also https://docs.databricks.com/dev-tools/bundles/library-dependencies
-    #
-    # LIMITATION: for DLT pipelines, dependencies are cached during development;
-    # add dependencies to the 'environment' section of your pipeline.yml file instead.
-    "requests>=2.31",
+    "requests>=2.31,<3",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
+    "pytest-cov",
+    "pytest-mock",
+    "responses",
     "ruff",
-    "databricks-dlt",
     "databricks-connect>=15.4,<15.5",
     "ipykernel",
 ]
@@ -31,6 +30,16 @@ verify_country_tables     = "atlas_stream.etl.verify:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "spark: marks tests that require a live Databricks Connect session (deselect with -m 'not spark')",
+]
+addopts = "--cov=src/atlas_stream --cov-report=term-missing"
+
+[tool.coverage.run]
+omit = ["src/**/*.ipynb"]
 
 [tool.ruff]
 line-length = 120

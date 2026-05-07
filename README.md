@@ -44,11 +44,11 @@ fixtures/                             # Static test data (JSON / CSV)
 
 ## Prerequisites
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| [uv](https://docs.astral.sh/uv/getting-started/installation/) | latest | Dependency management & wheel build |
-| [Databricks CLI](https://docs.databricks.com/dev-tools/cli/databricks-cli.html) | ≥ 0.292 | Bundle deploy / run |
-| Python | 3.10 – 3.12 | Runtime |
+| Tool                                                                            | Version     | Purpose                             |
+| ------------------------------------------------------------------------------- | ----------- | ----------------------------------- |
+| [uv](https://docs.astral.sh/uv/getting-started/installation/)                   | latest      | Dependency management & wheel build |
+| [Databricks CLI](https://docs.databricks.com/dev-tools/cli/databricks-cli.html) | ≥ 0.292     | Bundle deploy / run                 |
+| Python                                                                          | 3.10 – 3.12 | Runtime                             |
 
 ## Getting started
 
@@ -95,32 +95,73 @@ uv run ruff check src/ tests/
 # Build wheel
 uv build --wheel
 
-# Run tests (pure-Python tests always run; Spark tests require Databricks Connect auth)
-uv run pytest -v
+# Run pure-Python tests (no Databricks credentials needed)
+uv run pytest -m "not spark"
+
+# Run all tests including Spark integration tests (requires Databricks Connect auth)
+uv run pytest
 
 # Validate bundle before deploy
 databricks bundle validate
 ```
 
+### Makefile shortcuts
+
+```bash
+make lint          # ruff check
+make test          # pure-Python tests only (no credentials needed)
+make test-all      # all tests including Spark tests
+make build         # lint + test + uv build --wheel
+make validate      # build + bundle validate
+make deploy-dev    # validate + bundle deploy --target dev
+make deploy-prod   # validate + bundle deploy --target prod
+make run-dev       # bundle run atlas_stream_job --target dev
+make run-prod      # bundle run atlas_stream_job --target prod
+```
+
+## Continuous integration
+
+The `.github/workflows/ci.yml` workflow runs on every push and pull request to `main`/`master`:
+
+1. Lint with `ruff check`
+2. Pure-Python tests (no Databricks credentials — Spark tests skipped via `-m "not spark"`)
+3. `uv build --wheel`
+4. `databricks bundle validate`
+
 ## Job tasks
 
-| # | Task key | Entry point | Source → Target |
-|---|----------|-------------|-----------------|
-| 1 | `ingest_countries_to_bronze` | `ingest_countries` | REST API → `bronze.countries_raw` |
-| 2 | `bronze_countries_to_silver` | `bronze_countries_to_silver` | `bronze.countries_raw` → `silver.countries` |
-| 3 | `silver_countries_to_gold` | `silver_countries_to_gold` | `silver.countries` → 6 `gold.*` tables |
-| 4 | `verify_country_tables` | `verify_country_tables` | Asserts all 8 tables non-empty |
+| #   | Task key                     | Entry point                  | Source → Target                             | Retries | Timeout |
+| --- | ---------------------------- | ---------------------------- | ------------------------------------------- | ------- | ------- |
+| 1   | `ingest_countries_to_bronze` | `ingest_countries`           | REST API → `bronze.countries_raw`           | 2       | 5 min   |
+| 2   | `bronze_countries_to_silver` | `bronze_countries_to_silver` | `bronze.countries_raw` → `silver.countries` | 1       | 5 min   |
+| 3   | `silver_countries_to_gold`   | `silver_countries_to_gold`   | `silver.countries` → 6 `gold.*` tables      | 1       | 10 min  |
+| 4   | `verify_country_tables`      | `verify_country_tables`      | Runs 7 data quality checks across all 8 tables | 0    | 5 min   |
 
 Tasks run in sequence with `depends_on` dependencies. A failure in any task halts the chain.
 
+## Data quality checks
+
+`verify.py` runs 7 automated checks after each pipeline execution:
+
+| # | Check | Threshold |
+| - | ----- | --------- |
+| 1 | All 8 tables exist and are non-empty | — |
+| 2 | Silver row count within expected range | 220 – 260 rows |
+| 3 | Silver `cca2` uniqueness — no duplicate country codes | 0 duplicates |
+| 4 | Silver null `region` rate | < 5% |
+| 5 | Silver `population` has no nulls | 0 nulls |
+| 6 | Silver `population` has no negative values | 0 rows (note: `population = 0` is valid for uninhabited territories like Antarctica) |
+| 7 | `gold.countries_by_region` `sum(country_count)` == silver count | exact match |
+
 ## Variables
 
-| Variable | Dev default | Prod default | Override flag |
-|----------|-------------|--------------|---------------|
-| `catalog` | `workspace` | `workspace` | `--var catalog=my_catalog` |
-| `schema` | `<username>` | `prod` | `--var schema=my_schema` |
-| `source_api_url` | REST Countries v3.1 (9 fields) | same | `--var source_api_url=...` |
-| `schedule_pause_status` | `PAUSED` | `UNPAUSED` | automatic per target |
+| Variable                | Dev default                    | Prod default | Override flag              |
+| ----------------------- | ------------------------------ | ------------ | -------------------------- |
+| `catalog`               | `workspace`                    | `workspace`  | `--var catalog=my_catalog` |
+| `schema`                | `<username>`                   | `prod`       | `--var schema=my_schema`   |
+| `source_api_url`        | REST Countries v3.1 (9 fields) | same         | `--var source_api_url=...` |
+| `schedule_pause_status` | `PAUSED`                       | `UNPAUSED`   | automatic per target       |
+| `notification_email`    | `dbbruijn@gmail.com`           | same         | `--var notification_email=you@example.com` |
 
 Override on deploy:
 
@@ -131,11 +172,13 @@ databricks bundle deploy --target prod --var catalog=my_catalog
 ## Deployment targets
 
 ### `dev` (default)
+
 - All resource names prefixed `[dev <username>]`
 - Job schedule is **PAUSED** (run manually with `bundle run`)
 - Schema defaults to your Databricks username
 
 ### `prod`
+
 - Production resource names (no prefix)
 - Job schedule is **UNPAUSED** — runs daily
 - Requires `atlas_stream` profile in `~/.databrickscfg`

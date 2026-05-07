@@ -9,6 +9,18 @@ include:
   - resources/*.yml
 
 # ---------------------------------------------------------------------------
+# Sync exclusions: keep workspace file tree clean, speed up deploys
+# ---------------------------------------------------------------------------
+sync:
+  exclude:
+    - __pycache__
+    - .pytest_cache
+    - .venv
+    - dist
+    - .ruff_cache
+    - "**/*.pyc"
+
+# ---------------------------------------------------------------------------
 # Artifact: Python wheel used by the python_wheel_task in the job
 # ---------------------------------------------------------------------------
 artifacts:
@@ -36,6 +48,10 @@ variables:
   schedule_pause_status:
     description: Job trigger pause status — PAUSED or UNPAUSED
     default: UNPAUSED
+
+  notification_email:
+    description: Email address for job failure notifications (set to empty string to disable)
+    default: dbbruijn@gmail.com
 
 # ---------------------------------------------------------------------------
 # Targets

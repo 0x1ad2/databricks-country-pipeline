@@ -14,20 +14,57 @@ Targets:
 """
 
 import argparse
+import logging
 
 from databricks.sdk.runtime import spark
 from pyspark.sql.functions import col, count, current_timestamp, when
+from pyspark.sql.functions import max as spark_max
 from pyspark.sql.functions import round as spark_round
 from pyspark.sql.functions import sum as spark_sum
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+_TABLE_COMMENTS = {
+    "countries": (
+        "Enriched country-level table with population_density (people/km²) and size_category bucket. "
+        "Includes source_ingested_at for lineage. Source: REST Countries API v3.1. Refreshed daily."
+    ),
+    "countries_by_region": (
+        "Country counts and population aggregated by region + subregion. "
+        "Source: silver.countries. Refreshed daily."
+    ),
+    "countries_by_continent": (
+        "Country counts and population aggregated by continent (region). "
+        "Source: silver.countries. Refreshed daily."
+    ),
+    "population_tiers": (
+        "Countries bucketed by population size: Large(≥100M), Medium(10M–100M), Small(1M–10M), Micro(<1M). "
+        "Source: silver.countries. Refreshed daily."
+    ),
+    "landlocked_vs_coastal": (
+        "Landlocked vs coastal country counts and population totals per region. "
+        "Source: silver.countries. Refreshed daily."
+    ),
+    "un_membership_summary": (
+        "UN member vs non-member country counts and population totals per region. "
+        "Source: silver.countries. Refreshed daily."
+    ),
+}
+
 
 def _write(df, catalog: str, table: str) -> None:
-    """Overwrite a gold Delta table and report the row count."""
+    """Overwrite a gold Delta table, apply COMMENT, OPTIMIZE, and report row count."""
     full_name = f"`{catalog}`.gold.{table}"
-    df.write.format("delta").mode("overwrite").saveAsTable(full_name)
-    # Read count from the written table — avoids re-executing the transformation plan.
+    df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(full_name)
+    if table in _TABLE_COMMENTS:
+        spark.sql(f"COMMENT ON TABLE {full_name} IS '{_TABLE_COMMENTS[table]}'")
+    spark.sql(f"OPTIMIZE {full_name}")
     row_count = spark.read.table(full_name).count()
-    print(f"Wrote {row_count} rows \u2192 {full_name}")
+    logger.info("Wrote %d rows → %s", row_count, full_name)
 
 
 def silver_to_gold(catalog: str) -> None:
@@ -38,6 +75,7 @@ def silver_to_gold(catalog: str) -> None:
     # ------------------------------------------------------------------
     # gold.countries — enriched country-level table
     # Adds population_density (people / km²) and a size_category bucket.
+    # area=null is explicitly handled to avoid misleading "Small" classification.
     # ------------------------------------------------------------------
     countries_df = silver_df.select(
         col("name_common"),
@@ -52,14 +90,16 @@ def silver_to_gold(catalog: str) -> None:
             when(col("area") > 0, col("population") / col("area")),
             2,
         ).alias("population_density"),
-        when(col("area") > 1_000_000, "Very Large (>1M km2)")
+        when(col("area").isNull(), "Unknown")
+        .when(col("area") > 1_000_000, "Very Large (>1M km2)")
         .when(col("area") > 100_000, "Large (100k-1M km2)")
         .when(col("area") > 10_000, "Medium (10k-100k km2)")
         .otherwise("Small (<10k km2)")
         .alias("size_category"),
         col("landlocked"),
         col("un_member"),
-        col("updated_at"),
+        col("source_ingested_at"),
+        current_timestamp().alias("updated_at"),
     )
     _write(countries_df, catalog, "countries")
 
@@ -73,6 +113,7 @@ def silver_to_gold(catalog: str) -> None:
             spark_sum("population").alias("total_population"),
             spark_sum("area").alias("total_area_km2"),
             spark_sum(col("un_member").cast("int")).alias("un_member_count"),
+            spark_max("source_ingested_at").alias("source_ingested_at"),
         )
         .withColumn("updated_at", current_timestamp())
     )
@@ -80,7 +121,6 @@ def silver_to_gold(catalog: str) -> None:
 
     # ------------------------------------------------------------------
     # gold.countries_by_continent — continent (region) level rollup
-    # Collapses subregions into a single continent summary row.
     # ------------------------------------------------------------------
     by_continent_df = (
         silver_df.groupBy(col("region").alias("continent"))
@@ -89,6 +129,7 @@ def silver_to_gold(catalog: str) -> None:
             spark_sum("population").alias("total_population"),
             spark_sum("area").alias("total_area_km2"),
             spark_sum(col("un_member").cast("int")).alias("un_member_count"),
+            spark_max("source_ingested_at").alias("source_ingested_at"),
         )
         .withColumn("updated_at", current_timestamp())
     )
@@ -96,7 +137,6 @@ def silver_to_gold(catalog: str) -> None:
 
     # ------------------------------------------------------------------
     # gold.population_tiers — countries bucketed by population size
-    # Useful for understanding how many micro/small/medium/large nations exist.
     # ------------------------------------------------------------------
     tiers_df = (
         silver_df.withColumn(
@@ -110,6 +150,7 @@ def silver_to_gold(catalog: str) -> None:
         .agg(
             count("*").alias("country_count"),
             spark_sum("population").alias("total_population"),
+            spark_max("source_ingested_at").alias("source_ingested_at"),
         )
         .withColumn("updated_at", current_timestamp())
     )
@@ -117,7 +158,6 @@ def silver_to_gold(catalog: str) -> None:
 
     # ------------------------------------------------------------------
     # gold.landlocked_vs_coastal — landlocked vs coastal by region
-    # Answers: which regions have the most landlocked nations?
     # ------------------------------------------------------------------
     landlocked_df = (
         silver_df.groupBy("region", "landlocked")
@@ -125,6 +165,7 @@ def silver_to_gold(catalog: str) -> None:
             count("*").alias("country_count"),
             spark_sum("population").alias("total_population"),
             spark_sum("area").alias("total_area_km2"),
+            spark_max("source_ingested_at").alias("source_ingested_at"),
         )
         .withColumn("updated_at", current_timestamp())
     )
@@ -132,13 +173,13 @@ def silver_to_gold(catalog: str) -> None:
 
     # ------------------------------------------------------------------
     # gold.un_membership_summary — UN membership stats by region
-    # Answers: how many countries per region are / are not UN members?
     # ------------------------------------------------------------------
     un_df = (
         silver_df.groupBy("region", "un_member")
         .agg(
             count("*").alias("country_count"),
             spark_sum("population").alias("total_population"),
+            spark_max("source_ingested_at").alias("source_ingested_at"),
         )
         .withColumn("updated_at", current_timestamp())
     )

@@ -1,0 +1,44 @@
+[
+  {
+    "name": {
+      "common": "Netherlands",
+      "official": "Kingdom of the Netherlands"
+    },
+    "cca2": "NL",
+    "cca3": "NLD",
+    "region": "Europe",
+    "subregion": "Western Europe",
+    "population": 17590672,
+    "area": 41543.0,
+    "landlocked": false,
+    "unMember": true
+  },
+  {
+    "name": {
+      "common": "Germany",
+      "official": "Federal Republic of Germany"
+    },
+    "cca2": "DE",
+    "cca3": "DEU",
+    "region": "Europe",
+    "subregion": "Western Europe",
+    "population": 83240525,
+    "area": 357114.0,
+    "landlocked": false,
+    "unMember": true
+  },
+  {
+    "name": {
+      "common": "Chad",
+      "official": "Republic of Chad"
+    },
+    "cca2": "TD",
+    "cca3": "TCD",
+    "region": "Africa",
+    "subregion": "Middle Africa",
+    "population": 16425859,
+    "area": 1284000.0,
+    "landlocked": true,
+    "unMember": true
+  }
+]
