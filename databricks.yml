@@ -9,9 +9,14 @@ include:
   - resources/*.yml
 
 # ---------------------------------------------------------------------------
-# Sync exclusions: keep workspace file tree clean, speed up deploys
+# Sync: explicitly include source + notebooks; exclude dev/build artefacts
 # ---------------------------------------------------------------------------
 sync:
+  include:
+    - notebooks/**
+    - src/**
+    - resources/**
+    - fixtures/**
   exclude:
     - __pycache__
     - .pytest_cache

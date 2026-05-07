@@ -12,17 +12,19 @@ resources:
         domain: reference-data
         pipeline: atlas_stream
 
-      trigger:
-        # Run once a day; pause_status is overridden per target in databricks.yml.
-        # In dev mode the bundle also pauses schedules automatically.
-        periodic:
-          interval: 1
-          unit: DAYS
-        pause_status: ${var.schedule_pause_status}
+      # trigger:
+      #   # Run once a day; pause_status is overridden per target in databricks.yml.
+      #   # In dev mode the bundle also pauses schedules automatically.
+      #   periodic:
+      #     interval: 1
+      #     unit: DAYS
+      #   pause_status: ${var.schedule_pause_status}
 
       email_notifications:
         on_failure:
           - ${var.notification_email}
+
+      notification_settings:
         no_alert_for_skipped_runs: true
 
       # SLA guard: alert if the job is still running after 1 hour (normal ~5 min)
